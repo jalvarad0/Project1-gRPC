@@ -1,0 +1,82 @@
+syntax = "proto3";
+
+package whatsup;
+
+option go_package = "whatsup/whatsup"; // mutes a compiler warning
+// -----------------WhatsUp service-----------------
+
+message Success {
+    bool ok = 1;
+}
+
+message UserList {
+    repeated string users = 1;
+}
+
+message Registration {
+    string source_user = 1;
+}
+
+message AuthToken {
+    string token = 1;
+}
+
+message Empty {}
+
+// TODO: Create a ChatMessage message that contains two strings:
+// `user` and `body`. 
+
+// TODO: Create a ChatMessages message that contains a repeated list of
+// of ChatMessage
+
+service WhatsUp {
+    /* 
+
+     Our service works as a central mail exchange, forwarding messages
+     received to the appropriate user. There are many ways to architect
+     such a system.
+
+     A simple way to receive updates might be to poll (open a connection 
+     and send a new HTTP request) a server to a user periodically. This 
+     is great, but comes at the cost of incurring overhead for establishing 
+     the connection every time and may not have the best experience as it is
+     a blocking operation. 
+
+     Another way would be to *stream* updates: instead of the client asking
+     the server for updates and the server responding, the client can open a 
+     single connection, keep it alive as long it wants, and let the server send 
+     updates directly to it as they come. To make this even more efficient, we could 
+     implement *bidirectional streaming*: both server and client can send each
+     other as many messages as they want over a single indefinitely-held connection
+     until one of them closes it, giving it a very real-time feel. This is a much
+     more natural choice for developing a chat application.
+
+     Both architectures are supported by gRPC out of the box. Because the first 
+     pattern leads to code that resembles what you will use in other projects, we
+     have opted to work with this simpler but less efficient architecture. If you 
+     are interested in examples of how to develop a streaming application with gRPC, 
+     take a look at the client code, server code and protocol buffer code in 
+     https://github.com/pahanini/go-grpc-bidirectional-streaming-example
+
+    */
+
+    // User receives a connection token. This connection token is passed implicitly
+    // as metadata in all other calls, and is validated by a server-side interceptor.
+    rpc Connect(Registration) returns (AuthToken);
+
+    // User sends a message to another user.
+    // TODO: add an RPC message called Send that takes a ChatMessage and expects a Success message
+
+    // User fetches all messages addressed to themselves in batches. Batch size is
+    // defined by the server that implements this RPC, clients cannot control it.
+    // TODO: add an RPC message called Fetch that takes Empty and returns ChatMessages (note the plural!)
+
+    // User fetches a list of currently active users. 
+    rpc List(Empty) returns (UserList);
+
+    // Sent by the user to inform the server they are leaving. The server can then 
+    // choose to do something with the backlog of messages left in the user's 
+    // inbox queue that are still unread - for this lab, we will simply purge them.
+    // It also invalidates the authentication token used by the user.
+    rpc Disconnect(Empty) returns (Success);
+}
