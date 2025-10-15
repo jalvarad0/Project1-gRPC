@@ -23,11 +23,14 @@ message AuthToken {
 
 message Empty {}
 
-// TODO: Create a ChatMessage message that contains two strings:
-// `user` and `body`. 
+message ChatMessage {
+    string User = 1;
+    string Body = 2;
+}
 
-// TODO: Create a ChatMessages message that contains a repeated list of
-// of ChatMessage
+message ChatMessages {
+    repeated ChatMessage messages = 1;
+}
 
 service WhatsUp {
     /* 
@@ -66,10 +69,12 @@ service WhatsUp {
 
     // User sends a message to another user.
     // TODO: add an RPC message called Send that takes a ChatMessage and expects a Success message
+    rpc Send(ChatMessage) returns (Success);
 
     // User fetches all messages addressed to themselves in batches. Batch size is
     // defined by the server that implements this RPC, clients cannot control it.
     // TODO: add an RPC message called Fetch that takes Empty and returns ChatMessages (note the plural!)
+    rpc Fetch(Empty) returns (ChatMessages);
 
     // User fetches a list of currently active users. 
     rpc List(Empty) returns (UserList);

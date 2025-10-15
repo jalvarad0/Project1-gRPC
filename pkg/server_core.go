@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -92,6 +93,34 @@ func (s Server) Connect(_ context.Context, r *Registration) (*AuthToken, error) 
 // (when you initially receive it, it will have the name of the recipient instead).
 // TODO: Implement `Send`. If any errors occur, return any error message you'd like.
 func (s Server) Send(ctx context.Context, msg *ChatMessage) (*Success, error) {
+	// First extract the targets name
+	src := fmt.Sprintf("%v", ctx.Value("username"))
+	if src == "" {
+		return nil, errors.New("unauthenticated: missing username in context")
+	}
+
+	// Extract the targets name
+	dest := msg.User
+	if dest == "" {
+		return nil, errors.New("unauthenticated: missing receiver in context")
+	}
+
+	// Next grab their inbox
+	inbox, ok := s.Inboxes[dest]
+	if !ok {
+		return nil, errors.New("unauthenticated: We don't have an inbox for that receiver")
+	}
+
+	// I then want to update the msg use field so that they know who it is from
+	msg.User = src
+
+	// I then want to put it in their mailbox
+	select {
+	case inbox <- msg: // This syntax means, send a message to this inbox
+		return &Success{Ok: true}, nil
+	default: // Case where we fail
+		return &Success{Ok: false}, errors.New("We were not able to successfully send the message")
+	}
 }
 
 // Implementation of the Fetch method defined in our `.proto` file.
@@ -102,6 +131,41 @@ func (s Server) Send(ctx context.Context, msg *ChatMessage) (*Success, error) {
 //
 // TODO: Implement Fetch. If any errors occur, return any error message you'd like.
 func (s Server) Fetch(ctx context.Context, _ *Empty) (*ChatMessages, error) {
+
+	// Lets grab the targets name
+	target := fmt.Sprintf("%v", ctx.Value("username"))
+	if target == "" {
+		return nil, errors.New("missing username in context")
+	}
+
+	// Now lets grab their mailbox
+	inbox, ok := s.Inboxes[target]
+	if !ok {
+		return nil, errors.New("We don't have an inbox for that receiver")
+	}
+
+	// Now we create our messages buffer. Note to self, this syntax in go is like initalizing a pointer to a struct
+	messages := &ChatMessages{Messages: []*ChatMessage{}}
+
+	// Next we will for loop through the messages and add them to out buffer using select. Handle errors
+	for len(messages.Messages) < BATCH_SIZE { // Loop until we have BATCH_SIZE amout of messages in our messages bucket. Similar to while loop
+		select {
+		case <-ctx.Done(): // This is the case where the client disconnected or deadline expired
+			if len(messages.Messages) > 0 {
+				return messages, nil
+			}
+			return nil, errors.New("Something went wrong with with the connection")
+		case msg, open := <-inbox: // This is the case where we grab a message from the inbox. Note open allows us to tell if messages had stuff.
+			if !open {
+				return messages, nil
+			}
+			messages.Messages = append(messages.Messages, msg)
+		default:
+			return messages, nil
+		}
+	}
+	// We successfully got the messages out!
+	return messages, nil
 }
 
 // Implementation of the List method defined in our `.proto` file.
